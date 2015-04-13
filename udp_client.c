@@ -101,7 +101,7 @@ int main(int argc, char **argv)
             printf("file read error, or end of file\n");
             break;
         } else {
-            printf("%d bytes read from file\n");
+            printf("%d bytes read from file\n", (int)rsize);
             ikcp_send(kcp1, sendline, rsize);
         }
 

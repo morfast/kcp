@@ -75,8 +75,6 @@ int main(void)
 		ikcp_update(kcp1, iclock());
 
         while (1) {
-            isleep(8);
-            ikcp_update(kcp1, iclock());
             n = recvfrom(sockfd, mesg, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
             if (n < 0) {
                 break;
@@ -86,6 +84,8 @@ int main(void)
             printf("%s\n", mesg);
         }
         while (1) {
+		    isleep(8);
+		    ikcp_update(kcp1, iclock());
             n = ikcp_recv(kcp1, mesg, n);
             if (n < 0) break;
             printf("%d received from ikcp_recv\n", n);
