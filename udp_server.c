@@ -4,6 +4,7 @@
 #include<stdlib.h>
 #include<sys/socket.h>
 #include<netinet/in.h>
+#include <errno.h>
 
 #include "test.h"
 #include "ikcp.c"
@@ -11,16 +12,27 @@
 #define PORT 12345
 #define MAXLINE 10240
 
+static int sockfd;
+static struct sockaddr_in serveraddr, cliaddr;
+
 int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 {
+    int n;
+
+    n = sendto(sockfd, buf, len, 0, (struct sockaddr *)&cliaddr, sizeof(cliaddr));
+    if (n >= 0) {
+        fprintf(stderr, "%d bytes sent\n", n);
+    } else {
+        fprintf(stderr, "error: %d bytes send\n", n);
+        fprintf(stderr, "%d\n", errno);
+        return 1;
+    }
 	return 0;
 }
 
 int main(void)
 {
-    int sockfd;
     int err;
-    struct sockaddr_in serveraddr, cliaddr;
     int n;
     socklen_t len;
     char mesg[MAXLINE];
@@ -63,12 +75,6 @@ int main(void)
 		ikcp_update(kcp1, iclock());
 
         while (1) {
-            n = ikcp_recv(kcp1, mesg, n);
-            if (n < 0) break;
-            printf("%d received from ikcp_recv\n", n);
-            printf("%s\n", mesg);
-        }
-        while (1) {
             isleep(8);
             ikcp_update(kcp1, iclock());
             n = recvfrom(sockfd, mesg, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
@@ -77,6 +83,12 @@ int main(void)
             }
             ikcp_input(kcp1, mesg, n);
             printf("%d received from recvfrom\n", n);
+            printf("%s\n", mesg);
+        }
+        while (1) {
+            n = ikcp_recv(kcp1, mesg, n);
+            if (n < 0) break;
+            printf("%d received from ikcp_recv\n", n);
             printf("%s\n", mesg);
         }
     }

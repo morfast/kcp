@@ -16,13 +16,14 @@
 #define MAXLINE 1024*2
 
 static int sockfd;
-static struct sockaddr_in serveraddr;
+static struct sockaddr_in serveraddr, cliaddr;
 
 // kcp call back function
 int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 {
     int n;
 
+    fprintf(stderr, "udp_output\n");
     n = sendto(sockfd, buf, len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
     if (n >= 0) {
         fprintf(stderr, "%d bytes sent\n", n);
@@ -41,6 +42,8 @@ int main(int argc, char **argv)
     FILE *fp;
     size_t rsize;
     int mode;
+    socklen_t len;
+
 
     ikcpcb *kcp1 = ikcp_create(0x11223344, (void*)0);
     kcp1->output = udp_output;
@@ -81,10 +84,17 @@ int main(int argc, char **argv)
     }
 
 
+    int file_end = 0;
     while (1) {
 		isleep(8);
-		current = iclock();
+        fprintf(stderr, "ikcp_update\n");
 		ikcp_update(kcp1, iclock());
+
+        while(1) {
+            printf("ikcp_recv\n");
+            n = ikcp_recv(kcp1, sendline, n);
+            if (n < 0) break;
+        }
 
         rsize = fread(sendline, 1, 1400, fp);
         if (rsize == 0) {
@@ -92,10 +102,20 @@ int main(int argc, char **argv)
             break;
         } else {
             printf("%d bytes read from file\n");
+            ikcp_send(kcp1, sendline, rsize);
         }
 
-        ikcp_send(kcp1, sendline, rsize);
-        //n = sendto(sockfd, sendline, 1400, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
+        //while (1) {
+        //    printf("recvfrom\n");
+        //    n = recvfrom(sockfd, sendline, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
+        //    if (n < 0) {
+        //        break;
+        //    }
+        //    ikcp_input(kcp1, sendline, n);
+        //    printf("%d received from recvfrom\n", n);
+        //    printf("%s\n", sendline);
+        //}
+
     }
 
     return 0;
