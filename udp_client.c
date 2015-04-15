@@ -14,19 +14,30 @@
 
 #define PORT 12345
 #define MAXLINE 1024*2
+#define UDP_PACKET_SIZE 900
 
 static int sockfd;
 static struct sockaddr_in serveraddr, cliaddr;
+
+void print_msg(char *str, int len)
+{
+    int i;
+
+    for (i = 0; i < len; i++) {
+        printf("%c", str[i]);
+    }
+    printf("\n");
+}
 
 // kcp call back function
 int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 {
     int n;
 
-    fprintf(stderr, "udp_output\n");
     n = sendto(sockfd, buf, len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
     if (n >= 0) {
         fprintf(stderr, "%d bytes sent\n", n);
+        //print_msg(buf, len);
     } else {
         fprintf(stderr, "error: %d bytes send\n", n);
         fprintf(stderr, "%d\n", errno);
@@ -42,6 +53,7 @@ int main(int argc, char **argv)
     FILE *fp;
     size_t rsize;
     int mode;
+    int ret;
     socklen_t len;
 
 
@@ -59,6 +71,8 @@ int main(int argc, char **argv)
 	}	else {
 		ikcp_nodelay(kcp1, 1, 10, 2, 1);
 	}
+
+	ikcp_wndsize(kcp1, 1024, 1024);
 
     if (argc != 3) {
         printf("usage: %s <ip address> <filename>\n", argv[0]);
@@ -86,37 +100,52 @@ int main(int argc, char **argv)
 
     int file_end = 0;
     while (1) {
-		isleep(8);
+		isleep(1);
         fprintf(stderr, "ikcp_update\n");
 		ikcp_update(kcp1, iclock());
 
-        while(1) {
-            printf("ikcp_recv\n");
-            n = ikcp_recv(kcp1, sendline, n);
-            if (n < 0) break;
-        }
-
-        rsize = fread(sendline, 1, 1400, fp);
+        rsize = fread(sendline, 1, UDP_PACKET_SIZE, fp);
         if (rsize == 0) {
-            printf("file read error, or end of file\n");
-            break;
+            printf("end of file\n");
+            file_end = 1;
         } else {
             printf("%d bytes read from file\n", (int)rsize);
-            ikcp_send(kcp1, sendline, rsize);
+            ret = ikcp_send(kcp1, sendline, rsize);
+            isleep(1);
+            ikcp_update(kcp1, iclock());
+            if (ret < 0) {
+                fprintf(stderr, "ikcp_send error\n");
+                exit(1);
+            } else {
+                fprintf(stdout, "ikcp_send success\n");
+            }
         }
 
-        //while (1) {
-        //    printf("recvfrom\n");
-        //    n = recvfrom(sockfd, sendline, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
-        //    if (n < 0) {
-        //        break;
-        //    }
-        //    ikcp_input(kcp1, sendline, n);
-        //    printf("%d received from recvfrom\n", n);
-        //    printf("%s\n", sendline);
-        //}
+        while (1) {
+            //n = recvfrom(sockfd, sendline, MAXLINE, MSG_DONTWAIT, (struct sockaddr *)&cliaddr, &len);
+            n = recvfrom(sockfd, sendline, MAXLINE, MSG_DONTWAIT, NULL, NULL);
+            if (n < 0) {
+                break;
+            }
+            printf("%d received from recvfrom: ", n);
+            printf("%s\n", sendline);
+            ikcp_input(kcp1, sendline, n);
+            isleep(1);
+            ikcp_update(kcp1, iclock());
+        }
+
+        while(1) {
+            n = ikcp_recv(kcp1, sendline, MAXLINE);
+            isleep(1);
+            ikcp_update(kcp1, iclock());
+            if (n < 0) break;
+            printf("ikcp_recv\n");
+        }
+
+        if (file_end) break;
 
     }
+	ikcp_release(kcp1);
 
     return 0;
 
